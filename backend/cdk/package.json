@@ -1,0 +1,22 @@
+{
+  "name": "ac-controller-backend",
+  "version": "1.0.0",
+  "description": "AWS CDK infra for the ESP32 Smart AC Controller",
+  "bin": { "ac-backend": "bin/app.js" },
+  "scripts": {
+    "build": "tsc",
+    "synth": "cdk synth",
+    "deploy": "cdk deploy",
+    "diff": "cdk diff",
+    "destroy": "cdk destroy"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "aws-cdk": "^2.140.0",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.140.0",
+    "constructs": "^10.3.0"
+  }
+}

@@ -1,0 +1,36 @@
+Reference,Qty,Value,Footprint,LCSC,MfrPart,JLC_Type,Notes
+U4,1,ESP32-WROOM-32E,RF_Module:ESP32-WROOM-32E,C701341,ESP32-WROOM-32E-N4(4MB),Extended,"Main MCU+WiFi; 4MB flash (N4). Was C701343 = N16/16MB (~$4.65 ea) — switched to 4MB N4 to cut cost"
+U3,1,CH340C,Package_SO:SOIC-16_3.9x9.9mm_P1.27mm,C84681,CH340C,Extended,USB-UART; no crystal needed
+U2,1,AMS1117-3.3,Package_TO_SOT_SMD:SOT-223-3_TabPin2,C6186,AMS1117-3.3,Basic,3.3V LDO
+U1,1,USBLC6-2SC6,Package_TO_SOT_SMD:SOT-23-6,C7519,USBLC6-2SC6,Basic,USB ESD protection
+U5,1,SHT40,Sensor_Humidity:Sensirion_DFN-4_1.5x1.5mm_P0.8mm_SHT4x_NoCentralPad,C2909890,SHT40-AD1B-R2,Extended,"Temp+humidity I2C 0x44 (was BME280 ~$6.76; SHT40 ~$2/board). DFN-4. FIRMWARE: SHT4x driver, addr 0x44 (no pressure)"
+U6,1,IR-Receiver-38kHz,OptoDevice:Everlight_IRM-H6xxT,C91447,IRM-H638T/TR2,Extended,"SMD 38kHz IR receiver (learns the remote). Pinout per datasheet: pad1=GND pad2=GND pad3=OUT pad4=Vcc"
+J1,1,USB-C-16P,Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12,C165948,TYPE-C-31-M-12,Basic,USB-C power+USB2 data (THT legs; JLC assembles)
+D3,1,IR-LED-940nm,LED_SMD:LED_Everlight-SMD3528_3.5x2.8mm_67-21ST,C60109,IR67-21C/TR8,Extended,"On-board 940nm SMD IR emitter. C60109 is a SMD3528-2P package (3.5x2.8mm), NOT 1206 — footprint must be the Everlight 67-21 SMD3528. Cathode (pad1, smaller pad) now marked with a silk triangle (build_board.py) per JLC DFM request. Board must face the AC"
+Q1,1,MMBT3904,Package_TO_SOT_SMD:SOT-23,C20526,MMBT3904,Basic,Auto-reset NPN
+Q2,1,MMBT3904,Package_TO_SOT_SMD:SOT-23,C20526,MMBT3904,Basic,Auto-reset NPN
+Q3,1,MMBT3904,Package_TO_SOT_SMD:SOT-23,C20526,MMBT3904,Basic,"IR LED driver NPN. MMBT3904 (Basic) — ~76mA pulsed << 200mA limit; same part as Q1/Q2 so one feeder, no extended fee, and JLC has a 3D model for it"
+D1,1,LED-Red,LED_SMD:LED_0603_1608Metric,C2286,KT-0603R,Basic,"Power indicator. Red Basic (KT-0603R) — was green Extended; no Basic green/blue 0603 exists, red removes the feeder fee. Swap to a C9900 house LED for color if desired"
+D2,1,LED-Red,LED_SMD:LED_0603_1608Metric,C2286,KT-0603R,Basic,"Status LED on GPIO2. Red Basic (KT-0603R) — was blue Extended; shares the feeder with D1, no extended fee"
+SW1,1,SW-Tact-SMD,Button_Switch_SMD:SW_Push_1P1T_NO_CK_KMR2,C318884,TS-1187A,Basic,EN/Reset button
+SW2,1,SW-Tact-SMD,Button_Switch_SMD:SW_Push_1P1T_NO_CK_KMR2,C318884,TS-1187A,Basic,BOOT button
+C1,1,10uF,Capacitor_SMD:C_0603_1608Metric,C19702,CL10A106KP8NNNC,Basic,"VBUS bulk; 0603 10uF 10V (board footprint is 0603; BOM previously mislabeled 0805)"
+C3,1,10uF,Capacitor_SMD:C_0603_1608Metric,C19702,CL10A106KP8NNNC,Basic,3V3 bulk (LDO out); 0603 10uF 10V
+C4,1,100nF,Capacitor_SMD:C_0603_1608Metric,C14663,CL10B104KB8NNNC,Basic,3V3 decouple
+C5,1,100nF,Capacitor_SMD:C_0603_1608Metric,C14663,CL10B104KB8NNNC,Basic,CH340C V3 reg cap (VCC=5V; V3 sets 3.3V UART level)
+C6,1,100nF,Capacitor_SMD:C_0603_1608Metric,C14663,CL10B104KB8NNNC,Basic,BME280 decouple
+C7,1,10uF,Capacitor_SMD:C_0603_1608Metric,C19702,CL10A106KP8NNNC,Basic,ESP32 3V3 bulk; 0603 10uF 10V
+C8,1,100nF,Capacitor_SMD:C_0603_1608Metric,C14663,CL10B104KB8NNNC,Basic,ESP32 3V3 decouple
+C_EN,1,1uF,Capacitor_SMD:C_0603_1608Metric,C15849,CL10A105KB8NNNC,Basic,EN power-on delay
+C_irrx,1,4.7uF,Capacitor_SMD:C_0603_1608Metric,C19666,CL10A475KO8NNNC,Basic,IR receiver supply filter cap; 0603 4.7uF 16V
+R_EN,1,10k,Resistor_SMD:R_0603_1608Metric,C25804,0603WAF1002T5E,Basic,EN pullup; 10k 1% Basic (UniRoyal) — replaced overkill 0.1% extended part
+R_IO0,1,10k,Resistor_SMD:R_0603_1608Metric,C25804,0603WAF1002T5E,Basic,GPIO0 pullup; 10k 1% Basic (UniRoyal) — replaced overkill 0.1% extended part
+R_SDA,1,4.7k,Resistor_SMD:R_0603_1608Metric,C23162,0603WAF4701T5E,Basic,I2C SDA pullup
+R_SCL,1,4.7k,Resistor_SMD:R_0603_1608Metric,C23162,0603WAF4701T5E,Basic,I2C SCL pullup
+R_CC1,1,5.1k,Resistor_SMD:R_0603_1608Metric,C23186,0603WAF5101T5E,Basic,USB-C CC1 pulldown
+R_CC2,1,5.1k,Resistor_SMD:R_0603_1608Metric,C23186,0603WAF5101T5E,Basic,USB-C CC2 pulldown
+R_base,1,1k,Resistor_SMD:R_0603_1608Metric,C21190,0603WAF1001T5E,Basic,IR driver base
+R_irrx,1,100,Resistor_SMD:R_0603_1608Metric,C22775,0603WAF1000T5E,Basic,IR receiver supply filter series R; 100R 1% Basic (UniRoyal, back in stock)
+R_led,1,47,Resistor_SMD:R_0603_1608Metric,C23182,0603WAF470JT5E,Basic,IR LED current limit (pulsed)
+R_led2,1,330,Resistor_SMD:R_0603_1608Metric,C23138,0603WAF3300T5E,Basic,Status LED limit
+R_pwr,1,1k,Resistor_SMD:R_0603_1608Metric,C21190,0603WAF1001T5E,Basic,Power LED limit

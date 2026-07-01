@@ -1,0 +1,33 @@
+# Firmware secrets & build
+firmware/src/secrets.h
+firmware/.pio/
+firmware/.vscode/
+
+# Backend
+backend/cdk/node_modules/
+backend/cdk/cdk.out/
+backend/cdk/*.js
+backend/cdk/*.d.ts
+backend/lambdas/**/node_modules/
+**/certs/
+*.pem
+*.key
+
+# Hardware / EDA
+hardware/fab/
+__pycache__/
+*.pyc
+*.kicad_prl
+*-backups/
+
+# OS / editor
+.DS_Store
+*.swp
+
+# KiCad runtime junk
+*.lck
+~*.lck
+*-erc.rpt
+*-drc.rpt
+.history/
+fp-info-cache
