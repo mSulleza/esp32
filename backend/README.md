@@ -39,8 +39,26 @@ npx cdk bootstrap          # first time per account/region
 export BUDGET_ALERT_EMAIL=you@example.com
 export MONTHLY_BUDGET_USD=5
 
+# Optional: browser origins allowed to call the API (CORS). Default: none.
+# npx cdk deploy -c corsOrigins=http://localhost:5173,https://app.example.com
 npx cdk deploy
 ```
+
+### CORS (browser origins)
+
+The HTTP API sends CORS headers only for the origins you list. With nothing set
+(the default) no browser page can call the API cross-origin; curl, native apps
+and server-side callers are unaffected. Set a comma-separated list either way:
+
+```bash
+npx cdk deploy -c corsOrigins=http://localhost:5173,https://app.example.com
+# or
+export CORS_ALLOWED_ORIGINS=http://localhost:5173,https://app.example.com
+```
+
+or permanently in `cdk.json` under `"context": { "corsOrigins": [...] }`. Each
+entry must be a bare origin (`https://host[:port]`, no path); a `*` wildcard is
+refused at synth time.
 
 Outputs printed on success:
 
@@ -50,6 +68,26 @@ Outputs printed on success:
 | `UserPoolId` / `UserPoolClientId` | Cognito config for the app login |
 | `DevicesTableName` | DynamoDB table name |
 
+## Create app users
+
+Self sign-up is **disabled**: a Cognito user can call the API, so only accounts
+you create can sign in. Create one (Cognito emails a temporary password; the
+user sets a new one at first sign-in):
+
+```bash
+aws cognito-idp admin-create-user \
+  --user-pool-id <UserPoolId> \
+  --username you@example.com \
+  --user-attributes Name=email,Value=you@example.com Name=email_verified,Value=true
+```
+
+Their `sub` (needed to provision a device for them):
+
+```bash
+aws cognito-idp admin-get-user --user-pool-id <UserPoolId> --username you@example.com \
+  --query "UserAttributes[?Name=='sub'].Value" --output text
+```
+
 Then get your MQTT endpoint (goes into firmware `secrets.h`):
 
 ```bash
@@ -58,24 +96,28 @@ aws iot describe-endpoint --endpoint-type iot:Data-ATS
 
 ## Provision a device
 
-Each ESP32 needs its own IoT Thing + certificate. Use the helper:
+Each ESP32 needs its own IoT Thing + certificate **and** an owned row in the
+`Devices` table. Use the helper (from `backend/cdk`):
 
 ```bash
-./provision-device.sh ac-livingroom ./certs/ac-livingroom
+./provision-device.sh ac-livingroom ./certs/ac-livingroom <owner-cognito-sub> "Living Room AC"
 ```
 
-This creates the Thing, generates a keypair + certificate, attaches the
-`AcDevicePolicy`, and writes the PEM files to the output dir. Paste the cert,
-private key, and the Amazon Root CA into `firmware/src/secrets.h`. Also create a
-matching row in DynamoDB so the device shows up for your user:
+This first writes the `Devices` row `{deviceId, ownerSub, name}` (refusing to
+overwrite an existing row, so a device can't be re-assigned by re-running it),
+then creates the Thing, generates a keypair + certificate, attaches the
+`AcDevicePolicy`, and writes the PEM files to the output dir (mode 600). The
+table name comes from the stack outputs; set `DEVICES_TABLE` to override. Paste
+the cert, private key, and the Amazon Root CA into `firmware/src/secrets.h`.
 
-```bash
-aws dynamodb put-item --table-name <DevicesTableName> --item '{
-  "deviceId": {"S":"ac-livingroom"},
-  "ownerSub": {"S":"<your-cognito-sub>"},
-  "name": {"S":"Living Room AC"}
-}'
-```
+The `Devices` row is the only way a device gets an owner:
+
+- the **api** Lambda serves a device only to the Cognito user whose `sub` equals
+  the row's `ownerSub` (a row with no owner is served to nobody), and
+- the **ingest** Lambda only *updates* existing rows (`attribute_exists(deviceId)`);
+  a check-in from a Thing without a row is logged and dropped, never creates one.
+
+To hand a device to someone else, update `ownerSub` on its row directly.
 
 ## Cost
 

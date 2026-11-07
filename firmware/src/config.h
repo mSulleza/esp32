@@ -45,6 +45,12 @@
 #define TOPIC_SCHEDULES   "ac/%s/schedules"
 #define TOPIC_ACK         "ac/%s/ack"
 
+// Setpoint range accepted from the cloud (most IRremoteESP8266 AC protocols
+// support at least 16-30 °C). Keep in sync with TEMP_MIN_C / TEMP_MAX_C in
+// backend/lambdas/api/index.mjs.
+#define AC_MIN_TEMP_C   16
+#define AC_MAX_TEMP_C   30
+
 #define FW_VERSION   "1.0.0"
 #define MAX_SCHEDULES   32
 #define MAX_RAW_CODES   24

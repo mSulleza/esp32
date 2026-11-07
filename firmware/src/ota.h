@@ -11,7 +11,9 @@
 //                    bootloader when rollback is enabled in sdkconfig)
 //
 // Firmware is authenticated by code signature (ECDSA over its SHA-256) using the
-// public key in ota_pubkey.h — the S3 URL is just transport.
+// public key in ota_pubkey.h. The HTTPS download is also certificate-validated
+// against the root CA passed to begin() (Amazon Root CA 1 covers both AWS IoT
+// and S3), so a network attacker cannot substitute or tamper with the download.
 #pragma once
 #include <Arduino.h>
 #include <functional>
@@ -22,7 +24,8 @@ public:
   using PublishFn   = std::function<bool(const char* topic, const char* payload)>;
   using SubscribeFn = std::function<bool(const char* topic)>;
 
-  void begin(const char* thingName, PublishFn pub, SubscribeFn sub);
+  // rootCaPem: PEM trust anchor for the HTTPS firmware download (must outlive Ota).
+  void begin(const char* thingName, const char* rootCaPem, PublishFn pub, SubscribeFn sub);
   void onMqttConnect();        // (re)subscribe to Jobs topics + request next job
   void loop();                 // time-based retries / deferred reboot
 
@@ -46,6 +49,7 @@ private:
                            String& err);
 
   char thing_[48] = {0};
+  const char* rootCa_ = nullptr;
   char tNotify_[96], tGetAcc_[96], tGet_[96];
   PublishFn pub_;
   SubscribeFn sub_;

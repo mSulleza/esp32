@@ -136,3 +136,24 @@ POST /devices/ac-livingroom/schedules
 - **fan:** `auto | low | med | high | max` (mapped per protocol by `IRac`)
 - **swing:** `off | vertical | horizontal | both`
 - **daysOfWeek:** array of `0–6`, `0 = Sunday`
+
+## 5. REST input rules
+
+The api Lambda rejects anything else with `400 { "error": "bad request", "detail": "…" }`
+(unknown fields included). Unexpected server errors return
+`500 { "error": "internal", "requestId": "…" }`; details are only in CloudWatch.
+
+- **Body:** a JSON object, at most 16 KB.
+- **command:** `cmd` is one of `setState | replay | capture | identify | getState`,
+  with only that command's fields. A client `reqId` is ignored (the server assigns one).
+- **state / action:** only `power` (bool), `mode`, `fan`, `swing` (enums above) and
+  `tempC`, an integer **16–30** (same range the firmware clamps to,
+  `AC_MIN_TEMP_C`/`AC_MAX_TEMP_C`). Missing fields default to off / cool / 24 / auto / off.
+- **labels** (`label`, `rawCodeId`): 1–32 of `A-Z a-z 0-9 _ -`. `timeoutSec`: 1–300.
+- **schedule:** `time` is required, `"HH:MM"` 00:00–23:59; `daysOfWeek` 1–7 distinct
+  integers 0–6 (default every day); `id` 1–32 of `A-Z a-z 0-9 _ -`. `deviceId`,
+  `scheduleId` and `updatedAt` from a GET are accepted and ignored, so GET → edit → PUT works.
+- **schedule count:** at most 32, and the whole list must fit in one device MQTT
+  message (~1800 bytes; roughly 10 typical schedules). `PUT` requires a
+  `schedules` array (an empty array clears the list).
+- **telemetry:** `from`/`to` are epoch milliseconds with `from <= to`.

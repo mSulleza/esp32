@@ -17,6 +17,22 @@ import * as path from 'path';
 const BUDGET_ALERT_EMAIL = process.env.BUDGET_ALERT_EMAIL ?? '';
 const MONTHLY_BUDGET_USD = Number(process.env.MONTHLY_BUDGET_USD ?? '5');
 
+// Browser origins allowed to call the HTTP API (CORS). Comma-separated, from CDK
+// context (`cdk deploy -c corsOrigins=http://localhost:5173,https://app.example.com`
+// or "corsOrigins" in cdk.json) or the CORS_ALLOWED_ORIGINS env var. Default: none,
+// so no browser origin may call the API cross-origin (curl / native apps are
+// unaffected). A wildcard is refused.
+function corsOrigins(scope: Construct): string[] {
+  const raw: unknown = scope.node.tryGetContext('corsOrigins') ?? process.env.CORS_ALLOWED_ORIGINS ?? '';
+  const list = (Array.isArray(raw) ? raw.map(String) : String(raw).split(','))
+    .map((o) => o.trim()).filter(Boolean);
+  for (const o of list) {
+    if (!/^https?:\/\/[A-Za-z0-9.-]+(:[0-9]{1,5})?$/.test(o))
+      throw new Error(`corsOrigins: "${o}" is not an origin like https://app.example.com (no wildcards, paths or trailing slash)`);
+  }
+  return list;
+}
+
 export class AcBackendStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
@@ -53,8 +69,10 @@ export class AcBackendStack extends cdk.Stack {
     // ----------------------------------------------------------------
     // Cognito (user auth for the app/API)
     // ----------------------------------------------------------------
+    // No self sign-up: anyone who can sign up gets a valid JWT for the API.
+    // Create users with `aws cognito-idp admin-create-user` (see backend/README.md).
     const userPool = new cognito.UserPool(this, 'UserPool', {
-      selfSignUpEnabled: true,
+      selfSignUpEnabled: false,
       signInAliases: { email: true },
       removalPolicy: cdk.RemovalPolicy.RETAIN,
     });
@@ -122,12 +140,15 @@ export class AcBackendStack extends cdk.Stack {
     const authorizer = new apigwAuth.HttpUserPoolAuthorizer('Authorizer', userPool, {
       userPoolClients: [userPoolClient],
     });
+    const allowOrigins = corsOrigins(this);
     const httpApi = new apigw.HttpApi(this, 'HttpApi', {
-      corsPreflight: {
-        allowOrigins: ['*'],
-        allowMethods: [apigw.CorsHttpMethod.ANY],
-        allowHeaders: ['authorization', 'content-type'],
-      },
+      ...(allowOrigins.length ? {
+        corsPreflight: {
+          allowOrigins,
+          allowMethods: [apigw.CorsHttpMethod.ANY],
+          allowHeaders: ['authorization', 'content-type'],
+        },
+      } : {}),
     });
     const integration = new apigwInteg.HttpLambdaIntegration('ApiInteg', apiFn);
     // One catch-all route; the lambda routes internally by method+path.
@@ -173,19 +194,25 @@ export class AcBackendStack extends cdk.Stack {
       },
     });
 
-    const makeLambdaRule = (name: string, topic: string, kind: string) =>
+    // Explicit field lists (no `SELECT *`): deviceId and kind come only from the
+    // topic / rule, so a payload can't name another device. Fields are the ones
+    // lambdas/ingest/index.mjs reads for each kind.
+    const makeLambdaRule = (name: string, topic: string, kind: string, fields: string[]) =>
       new iot.CfnTopicRule(this, name, {
         ruleName: name,
         topicRulePayload: {
           awsIotSqlVersion: '2016-03-23',
-          sql: `SELECT *, topic(2) AS deviceId, '${kind}' AS kind FROM '${topic}'`,
+          sql: `SELECT ${fields.join(', ')}, topic(2) AS deviceId, '${kind}' AS kind FROM '${topic}'`,
           actions: [{ lambda: { functionArn: ingestFn.functionArn } }],
         },
       });
 
-    makeLambdaRule('AcStateRule',    'ac/+/state',    'state');
-    makeLambdaRule('AcCapturedRule', 'ac/+/captured', 'captured');
-    makeLambdaRule('AcAckRule',      'ac/+/ack',      'ack');
+    makeLambdaRule('AcStateRule',    'ac/+/state',    'state',
+      ['power', 'mode', 'tempC', 'fan', 'swing', 'protocol']);
+    makeLambdaRule('AcCapturedRule', 'ac/+/captured', 'captured',
+      ['label', 'decoded', 'raw', 'ts']);
+    makeLambdaRule('AcAckRule',      'ac/+/ack',      'ack',
+      ['reqId', 'ok', 'ts', 'detail']);
 
     // ----------------------------------------------------------------
     // IoT policy for devices (scoped to their own thing/topics)

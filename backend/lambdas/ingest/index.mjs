@@ -7,6 +7,24 @@ import { DynamoDBDocumentClient, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
 const DEVICES = process.env.DEVICES_TABLE;
 
+// Devices only ever UPDATE their own existing row. Rows are created (with an
+// ownerSub) by backend/cdk/provision-device.sh; a check-in from a Thing with no
+// row is logged and dropped instead of creating an ownerless row.
+const MUST_EXIST = 'attribute_exists(deviceId)';
+
+async function updateExisting(params) {
+  try {
+    await ddb.send(new UpdateCommand({ ...params, ConditionExpression: MUST_EXIST }));
+    return true;
+  } catch (e) {
+    if (e.name === 'ConditionalCheckFailedException') {
+      console.warn('ignoring message for unprovisioned device', JSON.stringify(params.Key.deviceId));
+      return false;
+    }
+    throw e;
+  }
+}
+
 export const handler = async (event) => {
   const { deviceId, kind } = event;
   if (!deviceId) { console.warn('no deviceId', event); return; }
@@ -26,29 +44,26 @@ export const handler = async (event) => {
     }
     case 'captured': {
       // Store the learned code under the device for backup/restore.
-      await ddb.send(new UpdateCommand({
-        TableName: DEVICES,
-        Key: { deviceId },
-        UpdateExpression: 'SET codes.#l = :c, lastSeen = :now',
-        ExpressionAttributeNames: { '#l': event.label || 'code' },
-        ExpressionAttributeValues: {
-          ':c': { decoded: event.decoded ?? null, raw: event.raw, ts: event.ts || now },
-          ':now': now,
-        },
-      })).catch(async (e) => {
+      const label = event.label || 'code';
+      const code = { decoded: event.decoded ?? null, raw: event.raw, ts: event.ts || now };
+      try {
+        await updateExisting({
+          TableName: DEVICES,
+          Key: { deviceId },
+          UpdateExpression: 'SET codes.#l = :c, lastSeen = :now',
+          ExpressionAttributeNames: { '#l': label },
+          ExpressionAttributeValues: { ':c': code, ':now': now },
+        });
+      } catch (e) {
         // `codes` map may not exist yet; create it then retry.
-        if (e.name === 'ValidationException') {
-          await ddb.send(new UpdateCommand({
-            TableName: DEVICES,
-            Key: { deviceId },
-            UpdateExpression: 'SET codes = :m, lastSeen = :now',
-            ExpressionAttributeValues: {
-              ':m': { [event.label || 'code']: { decoded: event.decoded ?? null, raw: event.raw, ts: event.ts || now } },
-              ':now': now,
-            },
-          }));
-        } else { throw e; }
-      });
+        if (e.name !== 'ValidationException') throw e;
+        await updateExisting({
+          TableName: DEVICES,
+          Key: { deviceId },
+          UpdateExpression: 'SET codes = :m, lastSeen = :now',
+          ExpressionAttributeValues: { ':m': { [label]: code }, ':now': now },
+        });
+      }
       break;
     }
     case 'ack':
@@ -69,11 +84,11 @@ async function touchDevice(deviceId, attrs) {
     names[`#${k}`] = k;
     values[`:${k}`] = v;
   }
-  await ddb.send(new UpdateCommand({
+  await updateExisting({
     TableName: DEVICES,
     Key: { deviceId },
     UpdateExpression: 'SET ' + sets.join(', '),
     ...(Object.keys(names).length ? { ExpressionAttributeNames: names } : {}),
     ExpressionAttributeValues: values,
-  }));
+  });
 }

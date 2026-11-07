@@ -35,8 +35,9 @@ static bool verifySignature(const uint8_t hash[32], const String& sigB64) {
 }
 
 // ---------------- lifecycle ----------------
-void Ota::begin(const char* thingName, PublishFn pub, SubscribeFn sub) {
+void Ota::begin(const char* thingName, const char* rootCaPem, PublishFn pub, SubscribeFn sub) {
   strncpy(thing_, thingName, sizeof(thing_) - 1);
+  rootCa_ = rootCaPem;
   pub_ = pub; sub_ = sub;
   snprintf(tNotify_, sizeof(tNotify_), "$aws/things/%s/jobs/notify-next", thing_);
   snprintf(tGetAcc_, sizeof(tGetAcc_), "$aws/things/%s/jobs/$next/get/accepted", thing_);
@@ -132,9 +133,15 @@ void Ota::updateJob(const String& jobId, const char* status, const String& detai
 bool Ota::downloadVerifyFlash(const String& url, size_t size,
                               const String& sha256Hex, const String& sigB64, String& err) {
   if (url.isEmpty() || sha256Hex.isEmpty() || sigB64.isEmpty()) { err = "bad job doc"; return false; }
+  if (!url.startsWith("https://")) { err = "url not https"; return false; }
+  if (!rootCa_ || !*rootCa_)       { err = "no root CA";    return false; }
 
+  // Validate the S3 server certificate (chains to Amazon Root CA 1, the same
+  // root used for AWS IoT). The ECDSA signature check below still decides
+  // whether the image is flashed; TLS validation stops a man-in-the-middle from
+  // substituting or tampering with the download in the first place.
   WiFiClientSecure client;
-  client.setInsecure();                 // integrity/authenticity comes from the ECDSA signature below
+  client.setCACert(rootCa_);
   HTTPClient http;
   if (!http.begin(client, url)) { err = "http begin"; return false; }
   int code = http.GET();

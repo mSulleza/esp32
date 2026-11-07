@@ -58,11 +58,40 @@ new image boots and reconnects; verification/flash failures report `FAILED` with
 
 ## Security model
 - **Authenticity/integrity:** firmware is only flashed if its SHA-256 matches the job
-  doc *and* the ECDSA signature verifies against the embedded public key. The S3/TLS
-  transport is secondary — a tampered or wrong binary is rejected regardless.
+  doc *and* the ECDSA signature verifies against the embedded public key. A tampered
+  or wrong binary is rejected regardless of how it arrived.
+- **Transport:** the HTTPS download validates the S3 server certificate against the
+  same Amazon Root CA 1 (`AWS_ROOT_CA` in `secrets.h`) used for AWS IoT, and only
+  `https://` URLs are accepted. If AWS ever moves S3 to a different root, add that
+  root or the download fails closed (the job reports `FAILED`, nothing is flashed).
 - **Access:** the S3 bucket is private; the device only ever sees a short-lived
   presigned URL minted by IoT at delivery.
 - **Bump `FW_VERSION`** in `config.h` each release (it's reported on SUCCEEDED).
+
+### Secrets are in every image
+`secrets.h` (Wi-Fi password, the device certificate **and its private key**) is
+compiled into the firmware, so every `.bin` you build — and the flash of every
+device — contains them. Anyone with the binary, or physical access to a device and
+a USB cable, can read them out with `esptool.py read_flash`.
+
+- Treat built `.bin` files as secret: don't attach them to issues/releases, and
+  keep the S3 firmware bucket private (it is).
+- Build one image per device (each has its own cert) and revoke a device's
+  certificate in IoT Core if the device or its image is lost.
+- **Recommended:** enable ESP32 **flash encryption** (and ideally Secure Boot v2)
+  in release mode so the flash can't simply be dumped. Both burn eFuses and are
+  irreversible; they need a custom `sdkconfig` (ESP-IDF or Arduino-as-component)
+  rather than the stock Arduino-ESP32 libs. Test on a spare board first.
+
+### Known limitation: no anti-downgrade
+The signature covers the image bytes only. Neither the job's `version` nor
+`FW_VERSION` is signed or compared on the device, so anyone able to create IoT
+Jobs (i.e. with your AWS credentials) can re-deliver **any older image you
+signed**, including one with a since-fixed bug. Mitigations until the device
+enforces a signed, monotonically increasing version (e.g. ESP-IDF secure version /
+anti-rollback eFuses, or signing `version || sha256` and storing the last
+accepted version in NVS): keep the signing key offline, restrict who can create
+IoT Jobs, and rotate the signing key if an old image must never run again.
 
 ## Rollback (caveat)
 The device marks the new image valid only after a healthy boot + MQTT reconnect, and

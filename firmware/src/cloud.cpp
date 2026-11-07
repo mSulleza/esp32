@@ -11,6 +11,11 @@ static WiFiClientSecure tlsClient;
 static PubSubClient mqtt(tlsClient);
 static Cloud* self = nullptr;   // for the static MQTT callback trampoline
 
+// Keep cloud-supplied setpoints inside the range the API accepts.
+static int clampTemp(int t) {
+  return t < AC_MIN_TEMP_C ? AC_MIN_TEMP_C : (t > AC_MAX_TEMP_C ? AC_MAX_TEMP_C : t);
+}
+
 void Cloud::begin() {
   self = this;
   snprintf(topicTelemetry_, sizeof(topicTelemetry_), TOPIC_TELEMETRY, DEVICE_ID);
@@ -31,7 +36,7 @@ void Cloud::begin() {
   });
 
   if (ota_)
-    ota_->begin(DEVICE_ID,
+    ota_->begin(DEVICE_ID, AWS_ROOT_CA,
       [](const char* t, const char* pl) { return mqtt.publish(t, pl); },
       [](const char* t) { return mqtt.subscribe(t, 1); });
 }
@@ -83,7 +88,7 @@ void Cloud::handleMessage(char* topic, uint8_t* payload, unsigned int len) {
       AcState s;
       s.power = st["power"] | false;
       s.mode  = parseMode(st["mode"] | "cool");
-      s.tempC = st["tempC"] | 24;
+      s.tempC = clampTemp(st["tempC"] | 24);
       s.fan   = parseFan(st["fan"] | "auto");
       s.swing = parseSwing(st["swing"] | "off");
       onSetState(s, reqId);
@@ -111,14 +116,19 @@ void Cloud::handleMessage(char* topic, uint8_t* payload, unsigned int len) {
       String t = (const char*)(o["time"] | "00:00");
       s.hour   = t.substring(0, 2).toInt();
       s.minute = t.substring(3, 5).toInt();
-      // daysOfWeek array -> bitmask
+      // daysOfWeek array -> bitmask (ignore anything outside 0..6: shifting by
+      // a negative or >= 32 amount is undefined behaviour)
       s.daysMask = 0;
-      for (int d : o["daysOfWeek"].as<JsonArray>()) s.daysMask |= (1 << d);
+      for (JsonVariant v : o["daysOfWeek"].as<JsonArray>()) {
+        if (!v.is<int>()) continue;
+        int d = v.as<int>();
+        if (d >= 0 && d <= 6) s.daysMask |= (uint8_t)(1u << d);
+      }
       if (s.daysMask == 0) s.daysMask = 0x7F;
       JsonObject a = o["action"];
       s.action.power = a["power"] | false;
       s.action.mode  = parseMode(a["mode"] | "cool");
-      s.action.tempC = a["tempC"] | 24;
+      s.action.tempC = clampTemp(a["tempC"] | 24);
       s.action.fan   = parseFan(a["fan"] | "auto");
       s.action.swing = parseSwing(a["swing"] | "off");
       list.push_back(s);
